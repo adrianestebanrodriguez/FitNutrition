@@ -23,6 +23,13 @@ export interface UserProfile {
   problemasMusculares?: string;
 }
 
+export interface AuthUser {
+  displayName?: string;
+  email?: string;
+  picture?: string;
+  id?: string;
+}
+
 export interface CalorieLog {
   fecha: string; // YYYY-MM-DD
   comida: string; // e.g., "Desayuno", "Almuerzo", "Cena", "Snack"

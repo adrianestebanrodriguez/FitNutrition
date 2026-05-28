@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { googleSignIn } from '../lib/firebase';
 import { Sparkles, Calendar, TrendingUp, RefreshCw, Key } from 'lucide-react';
-import { User } from 'firebase/auth';
+import type { AuthUser } from '../types';
 
 interface LoginScreenProps {
-  onLoginSuccess: (user: User, token: string) => void;
+  onLoginSuccess: (user: AuthUser, token: string) => void;
 }
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {

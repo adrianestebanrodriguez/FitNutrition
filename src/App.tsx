@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User } from 'firebase/auth';
+import type { AuthUser } from './types';
 import { initAuth, logout, setAccessToken } from './lib/firebase';
 import { initializeSpreadsheet, getProfile, getCalorieLogs, getActivityLogs, getWeeklyPlan, getProfileHistory } from './lib/sheets';
 import { UserProfile, CalorieLog, ActivityLog, WeeklyPlan } from './types';
@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,7 +96,7 @@ export default function App() {
   }, [loadAllData]);
 
   // Auth success callback from login component
-  const handleLoginSuccess = (signedInUser: User, accessToken: string) => {
+  const handleLoginSuccess = (signedInUser: AuthUser, accessToken: string) => {
     setUser(signedInUser);
     setToken(accessToken);
     setAccessToken(accessToken); // sync library cache
