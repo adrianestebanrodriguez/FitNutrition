@@ -7,6 +7,20 @@ export interface UserProfile {
   objetivo: string; // e.g. "Perder peso", "Mantener peso", "Ganar masa muscular"
   kcalObjetivo: number;
   proteinasObjetivo: number; // in grams
+  
+  // Health Sector Clinical Metrics
+  glucosaSangre?: number; // mg/dL
+  trigliceridos?: number; // mg/dL
+  colesterolHDL?: number; // mg/dL
+  colesterolLDL?: number; // mg/dL
+  horasSueno?: number;    // hours
+  tshTiroides?: number;  // µIU/mL
+  pcrUs?: number;         // mg/L (hs-CRP)
+
+  // Medical conditions and physical restrictions
+  enfermedades?: string;
+  lesiones?: string;
+  problemasMusculares?: string;
 }
 
 export interface CalorieLog {
