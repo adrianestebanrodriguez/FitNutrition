@@ -77,21 +77,35 @@ export default function App() {
 
   // Listen for login status dynamically on mount
   useEffect(() => {
-    const unsubscribe = initAuth(
-      (currentUser, accessToken) => {
-        setUser(currentUser);
-        setToken(accessToken);
-        setAccessToken(accessToken); // sync library cache
-        setNeedsAuth(false);
-        loadAllData(accessToken);
-      },
-      () => {
-        setNeedsAuth(true);
-        setUser(null);
-        setToken(null);
-        setIsLoading(false);
+    let unsubscribe = () => {};
+
+    const init = async () => {
+      try {
+        const cleanup = await initAuth(
+          (currentUser, accessToken) => {
+            setUser(currentUser);
+            setToken(accessToken);
+            setAccessToken(accessToken); // sync library cache
+            setNeedsAuth(false);
+            loadAllData(accessToken);
+          },
+          () => {
+            setNeedsAuth(true);
+            setUser(null);
+            setToken(null);
+            setIsLoading(false);
+          }
+        );
+
+        if (typeof cleanup === 'function') {
+          unsubscribe = cleanup;
+        }
+      } catch (error) {
+        console.error('Error inicializando autenticación:', error);
       }
-    );
+    };
+
+    init();
     return () => unsubscribe();
   }, [loadAllData]);
 

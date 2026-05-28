@@ -27,28 +27,67 @@ function fallbackPlanGenerator(profile: any) {
   const dailyKcalTarget = profile.dailyKcalTarget || profile.kcalObjetivo || 2000;
   const proteinsTarget = profile.proteinsTarget || profile.proteinasObjetivo || 100;
 
-  const dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-  
-  const planesPorDia = dias.map((dia, index) => {
-    let entrenamiento = "Caminata de 45 minutos a intensidad moderada para recuperación activa";
-    if (index % 3 === 0) {
-      entrenamiento = "Rutina de fuerza enfocada en tren superior (Push/Pull): 4 series de dominadas, flexiones, press militar y fondos de tríceps";
-    } else if (index % 3 === 1) {
-      entrenamiento = "Rutina de fuerza enfocada en tren inferior (Piernas/Core): 4 series de sentadillas, zancadas, peso muerto rumano y planchas";
-    } else if (index === 6) {
-      entrenamiento = "Día de descanso pasivo o estiramientos fluidos de yoga de 20 minutos";
-    }
+  const desayunos = [
+    "Huevos revueltos (3 claras, 1 huevo entero) con 1 tostada de pan integral, aguacate y taza de café sin azúcar.",
+    "Bowl de yogur griego natural (200g) con fresas, arándanos, granola sin azúcar y semillas de chía.",
+    "Tortitas fit de avena y claras de huevo (3 unidades) con sirope sin calorías y frutos rojos frescos.",
+    "Batido verde detox: espinacas, 1/2 plátano, proteína whey, leche de almendras y 1 cucharada de mantequilla de maní.",
+    "Omelette de 2 huevos enteros + 2 claras con champiñones, espinacas, tomate cherry y queso light.",
+    "Pan integral tostado (2 rebanadas) con aguacate machacado, huevo pochado y salmón ahumado.",
+    "Avena cocida en leche desnatada con canela, manzana picada, nueces y un toque de miel."
+  ];
 
-    return {
-      dia,
-      desayuno: "Huevos revueltos (3 claras, 1 huevo entero) con 1 tostada de pan integral, aguacate y taza de café sin azúcar.",
-      almuerzo: "Pechuga de pollo a la plancha (150g) con ensalada fresca mixta condimentada y porción de arroz cocido.",
-      cena: "Filete de salmón asado a la plancha acompañado de brócoli al vapor y un toque de aceite de oliva.",
-      snacks: "Un puñado de almendras tostadas (25g) más una manzana entera picada.",
-      kcalEstimada: Math.round(dailyKcalTarget * (0.95 + (index % 7) * 0.01)),
-      entrenamiento
-    };
-  });
+  const almuerzos = [
+    "Pechuga de pollo a la plancha (150g) con ensalada fresca mixta condimentada y porción de arroz cocido.",
+    "Bowl de quinoa con garbanzos, pepino, tomate cherry, aceitunas, cebolla morada y aderezo de limón.",
+    "Pescado blanco al horno (merluza 180g) con patatas asadas y verduras salteadas (pimiento, calabacín, berenjena).",
+    "Carne magra de ternera (150g) salteada con tiras de pimiento y cebolla, acompañada de arroz integral.",
+    "Pollo al curry con leche de coco ligera, espinacas frescas y arroz basmati integral.",
+    "Ensalada completa de atún, huevo duro, maíz, lechuga, tomate, aceitunas y vinagreta ligera.",
+    "Wrap integral de pavo, lechuga, tomate, queso fresco y hummus como aderezo."
+  ];
+
+  const cenas = [
+    "Filete de salmón asado a la plancha acompañado de brócoli al vapor y un toque de aceite de oliva.",
+    "Tortilla de claras con espinacas y queso cottage, acompañada de ensalada verde.",
+    "Pechuga de pollo desmenuzada sobre cama de rúcula, tomates cherry, nueces y vinagreta balsámica.",
+    "Revuelto de tofu o claras con champiñones, ajo y perejil, con espárragos trigueros salteados.",
+    "Lomos de merluza al papillote con verduras (brócoli, zanahoria, calabacín) y un chorrito de aceite de oliva virgen.",
+    "Ensalada templada de garbanzos, espinacas salteadas, pimiento asado y taquitos de jamón serrano.",
+    "Crema de calabaza y zanahoria casera con jengibre y una pizca de cúrcuma, acompañada de daditos de pollo salteado."
+  ];
+
+  const snacksList = [
+    "Un puñado de almendras tostadas (25g) más una manzana entera picada.",
+    "Yogur griego natural (150g) con arándanos y una cucharadita de semillas de lino.",
+    "Batido de proteína whey con leche desnatada y canela.",
+    "Palitos de zanahoria y apio con hummus casero (2 cucharadas).",
+    "Puñado de nueces (30g) y una pera fresca.",
+    "Queso cottage (100g) con rodajas de tomate y orégano.",
+    "Un puñado de garbanzos asados con especias y una mandarina."
+  ];
+
+  const entrenamientos = [
+    "Rutina de fuerza enfocada en tren superior (Push/Pull): 4 series de dominadas, flexiones, press militar y fondos de tríceps.",
+    "Rutina de fuerza enfocada en tren inferior (Piernas/Core): 4 series de sentadillas, zancadas, peso muerto rumano y planchas.",
+    "HIIT de 20 minutos: 40s de trabajo/20s de descanso (burpees, mountain climbers, jump squats, high knees).",
+    "Cardio moderado: 40 minutos de bicicleta estática a ritmo constante más 15 minutos de abdominales.",
+    "Circuito funcional: 3 rondas de 12 ejercicios (30s cada uno) combinando saltos, fuerza y core.",
+    "Natación o sesión de elíptica: 40 minutos a intensidad media-alta más estiramientos finales.",
+    "Día de descanso activo: caminata de 45 minutos a ritmo ligero seguido de 20 minutos de estiramientos y yoga."
+  ];
+
+  const dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
+  const planesPorDia = dias.map((dia, index) => ({
+    dia,
+    desayuno: desayunos[index % desayunos.length],
+    almuerzo: almuerzos[index % almuerzos.length],
+    cena: cenas[index % cenas.length],
+    snacks: snacksList[index % snacksList.length],
+    kcalEstimada: Math.round(dailyKcalTarget * (0.95 + (index % 7) * 0.01)),
+    entrenamiento: entrenamientos[index % entrenamientos.length]
+  }));
 
   return {
     objetivo: "Sugerencia personalizada de plan nutricional generada localmente debido a límites de API excedidos temporalmente.",
