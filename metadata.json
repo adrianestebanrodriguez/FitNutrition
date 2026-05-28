@@ -1,0 +1,6 @@
+{
+  "name": "Asistente de Actividad Física y Nutrición",
+  "description": "Planificador de actividad física, menú semanal y calorías diarias sincronizado con Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
