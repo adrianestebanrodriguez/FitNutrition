@@ -143,13 +143,18 @@ async function callGemini(prompt: string, schema?: any): Promise<string | null> 
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Gemini API error:', res.status, errText);
+      return null;
+    }
     const data = await res.json();
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-  } catch {
+  } catch (e: any) {
+    console.error('Gemini fetch error:', e?.message || e);
     return null;
   }
 }
