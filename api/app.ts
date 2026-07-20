@@ -1,5 +1,4 @@
 import express, { Request, Response } from "express";
-import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -8,16 +7,21 @@ const app = express();
 
 app.use(express.json());
 
-// Initialize server-side Gemini client
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({
-  apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+let _genaiCache: any = null;
+async function getGenAI() {
+  if (_genaiCache) return _genaiCache;
+  try {
+    const mod = await import('@google/genai');
+    const ai = new mod.GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY || '',
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+    });
+    _genaiCache = { ai, Type: mod.Type };
+  } catch (e) {
+    _genaiCache = { ai: null, Type: null };
   }
-});
+  return _genaiCache;
+}
 
 // Helper Functions for Offline Fallback Generators
 function fallbackPlanGenerator(profile: any) {
@@ -530,31 +534,31 @@ CRÍTICO SOBRE ADAPTACIÓN CLÍNICA: Cada comida debe estar alineada con las con
 Escribe todo en ESPAÑOL, de manera motivadora, elegante y profesional.`;
 
   const responseSchema = {
-    type: Type.OBJECT,
+    type: "object",
     required: ["objetivo", "planesPorDia", "consejosGenerales"],
     properties: {
       objetivo: {
-        type: Type.STRING,
+        type: "string",
         description: "Resumen motivador sobre cómo este plan ayudará a alcanzar el objetivo."
       },
       consejosGenerales: {
-        type: Type.STRING,
+        type: "string",
         description: "Consejos generales sobre hidratación, descanso y disciplina en español."
       },
       planesPorDia: {
-        type: Type.ARRAY,
+        type: "array",
         description: "Lista ordenada de 7 elementos correspondientes a los días de la semana de Lunes a Domingo.",
         items: {
-          type: Type.OBJECT,
+          type: "object",
           required: ["dia", "desayuno", "almuerzo", "cena", "snacks", "kcalEstimada", "entrenamiento"],
           properties: {
-            dia: { type: Type.STRING, description: "Nombre del día de la semana, p. ej. 'Lunes'" },
-            desayuno: { type: Type.STRING, description: "Detalle del desayuno recomendado." },
-            almuerzo: { type: Type.STRING, description: "Detalle del almuerzo recomendado." },
-            cena: { type: Type.STRING, description: "Detalle de la cena recomendada." },
-            snacks: { type: Type.STRING, description: "Detalle de colaciones o snacks." },
-            kcalEstimada: { type: Type.INTEGER, description: "Estimación del total de kcal de estas comidas del día entera." },
-            entrenamiento: { type: Type.STRING, description: "Rutina o propuesta de ejercicio físico para este día." }
+            dia: { type: "string", description: "Nombre del día de la semana, p. ej. 'Lunes'" },
+            desayuno: { type: "string", description: "Detalle del desayuno recomendado." },
+            almuerzo: { type: "string", description: "Detalle del almuerzo recomendado." },
+            cena: { type: "string", description: "Detalle de la cena recomendada." },
+            snacks: { type: "string", description: "Detalle de colaciones o snacks." },
+            kcalEstimada: { type: "integer", description: "Estimación del total de kcal de estas comidas del día entera." },
+            entrenamiento: { type: "string", description: "Rutina o propuesta de ejercicio físico para este día." }
           }
         }
       }
@@ -562,9 +566,12 @@ Escribe todo en ESPAÑOL, de manera motivadora, elegante y profesional.`;
   };
 
   try {
+    const genai = await getGenAI();
+    if (!genai.ai) throw new Error("Gemini SDK not available");
+
     let resultText = "";
     try {
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
@@ -576,7 +583,7 @@ Escribe todo en ESPAÑOL, de manera motivadora, elegante y profesional.`;
       resultText = response.text || "";
     } catch (err: any) {
       console.warn("Attempt 1 with gemini-3.5-flash failed, trying gemini-3.1-flash-lite:", err.message || err);
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
@@ -620,19 +627,22 @@ Calcula de manera profesional y realista:
 Responde estrictamente en formato JSON según el esquema especificado.`;
 
   const responseSchema = {
-    type: Type.OBJECT,
+    type: "object",
     required: ["alimentos", "calorias", "proteinas"],
     properties: {
-      alimentos: { type: Type.STRING, description: "Lista concisa y formateada de los ingredientes identificados en español." },
-      calorias: { type: Type.INTEGER, description: "Calorías calculadas como número entero." },
-      proteinas: { type: Type.INTEGER, description: "Gramos de proteína calculados como número entero." }
+      alimentos: { type: "string", description: "Lista concisa y formateada de los ingredientes identificados en español." },
+      calorias: { type: "integer", description: "Calorías calculadas como número entero." },
+      proteinas: { type: "integer", description: "Gramos de proteína calculados como número entero." }
     }
   };
 
   try {
+    const genai = await getGenAI();
+    if (!genai.ai) throw new Error("Gemini SDK not available");
+
     let resultText = "";
     try {
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
@@ -644,7 +654,7 @@ Responde estrictamente en formato JSON según el esquema especificado.`;
       resultText = response.text || "";
     } catch (err: any) {
       console.warn("Attempt 1 with gemini-3.5-flash failed, trying gemini-3.1-flash-lite:", err.message || err);
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
@@ -685,20 +695,23 @@ Determina de forma realista:
 Responde estrictamente en formato JSON según el esquema especificado.`;
 
   const responseSchema = {
-    type: Type.OBJECT,
+    type: "object",
     required: ["ejercicio", "duracion", "intensidad", "caloriasQuemadas"],
     properties: {
-      ejercicio: { type: Type.STRING, description: "Nombre simple y estandarizado del ejercicio o deporte en español." },
-      duracion: { type: Type.INTEGER, description: "Duración estimada en minutos como número entero." },
-      intensidad: { type: Type.STRING, description: "Intensidad medida como 'Baja', 'Media' o 'Alta'." },
-      caloriasQuemadas: { type: Type.INTEGER, description: "Calorías quemadas estimadas como número entero de kcal." }
+      ejercicio: { type: "string", description: "Nombre simple y estandarizado del ejercicio o deporte en español." },
+      duracion: { type: "integer", description: "Duración estimada en minutos como número entero." },
+      intensidad: { type: "string", description: "Intensidad medida como 'Baja', 'Media' o 'Alta'." },
+      caloriasQuemadas: { type: "integer", description: "Calorías quemadas estimadas como número entero de kcal." }
     }
   };
 
   try {
+    const genai = await getGenAI();
+    if (!genai.ai) throw new Error("Gemini SDK not available");
+
     let resultText = "";
     try {
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
@@ -710,7 +723,7 @@ Responde estrictamente en formato JSON según el esquema especificado.`;
       resultText = response.text || "";
     } catch (err: any) {
       console.warn("Attempt 1 with gemini-3.5-flash failed, trying gemini-3.1-flash-lite:", err.message || err);
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
@@ -753,30 +766,30 @@ Cada sugerencia de receta debe ser detallada, creativa, variada (no repitas rece
 Responde estrictamente en formato JSON en ESPAÑOL, siguiendo el esquema de respuesta definido.`;
 
   const responseSchema = {
-    type: Type.OBJECT,
+    type: "object",
     required: ["recetas"],
     properties: {
       recetas: {
-        type: Type.ARRAY,
+        type: "array",
         description: "Colección de 2 a 3 sugerencias de recetas recomendadas.",
         items: {
-          type: Type.OBJECT,
+          type: "object",
           required: ["nombre", "calorias", "proteinas", "ingredientes", "pasos", "justificacion"],
           properties: {
-            nombre: { type: Type.STRING, description: "Nombre atractivo e informativo de la receta en español." },
-            calorias: { type: Type.INTEGER, description: "Calorías estimadas del plato como número entero." },
-            proteinas: { type: Type.INTEGER, description: "Proteínas estimadas del plato en gramos como número entero." },
+            nombre: { type: "string", description: "Nombre atractivo e informativo de la receta en español." },
+            calorias: { type: "integer", description: "Calorías estimadas del plato como número entero." },
+            proteinas: { type: "integer", description: "Proteínas estimadas del plato en gramos como número entero." },
             ingredientes: {
-              type: Type.ARRAY,
+              type: "array",
               description: "Lista de ingredientes necesarios con sus respectivas cantidades.",
-              items: { type: Type.STRING }
+              items: { type: "string" }
             },
             pasos: {
-              type: Type.ARRAY,
+              type: "array",
               description: "Pasos claros y secuenciales para la preparación y cocinado de la receta.",
-              items: { type: Type.STRING }
+              items: { type: "string" }
             },
-            justificacion: { type: Type.STRING, description: "Explicación breve de por qué este plato cumple de manera excelente con las calorías y preferencias solicitadas." }
+            justificacion: { type: "string", description: "Explicación breve de por qué este plato cumple de manera excelente con las calorías y preferencias solicitadas." }
           }
         }
       }
@@ -784,9 +797,12 @@ Responde estrictamente en formato JSON en ESPAÑOL, siguiendo el esquema de resp
   };
 
   try {
+    const genai = await getGenAI();
+    if (!genai.ai) throw new Error("Gemini SDK not available");
+
     let resultText = "";
     try {
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
@@ -798,7 +814,7 @@ Responde estrictamente en formato JSON en ESPAÑOL, siguiendo el esquema de resp
       resultText = response.text || "";
     } catch (err: any) {
       console.warn("Attempt 1 with gemini-3.5-flash failed, trying gemini-3.1-flash-lite:", err.message || err);
-      const response = await ai.models.generateContent({
+      const response = await genai.ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
