@@ -219,7 +219,15 @@ async function parseBody(req: any): Promise<any> {
 
 async function handleSuggestPlan(req: VercelRequest, res: VercelResponse) {
   const body = await parseBody(req);
-  const { goal, dailyKcalTarget, proteinsTarget, enfermedades, lesiones, problemasMusculares, alergias, restricciones } = body;
+
+  const goal = sanitizeStr(body.goal, 200);
+  const dailyKcalTarget = sanitizeNum(body.dailyKcalTarget, 500, 10000) || 2000;
+  const proteinsTarget = sanitizeNum(body.proteinsTarget, 20, 500) || 100;
+  const enfermedades = sanitizeStr(body.enfermedades, 1000);
+  const lesiones = sanitizeStr(body.lesiones, 1000);
+  const problemasMusculares = sanitizeStr(body.problemasMusculares, 1000);
+  const alergias = sanitizeStr(body.alergias, 1000);
+  const restricciones = sanitizeStr(body.restricciones, 1000);
 
   const profile = { goal, dailyKcalTarget, proteinsTarget, enfermedades, lesiones, problemasMusculares, alergias, restricciones };
   const restriccionesText = [enfermedades, lesiones, problemasMusculares, alergias, restricciones].filter(Boolean).join(', ');
@@ -265,7 +273,7 @@ async function handleSuggestPlan(req: VercelRequest, res: VercelResponse) {
 
 async function handleAnalyzeFood(req: VercelRequest, res: VercelResponse) {
   const body = await parseBody(req);
-  const text = body.text || '';
+  const text = sanitizeStr(body.text, 2000);
 
   if (!text) {
     return res.status(400).json({ error: 'Por favor proporciona la descripción de lo que comiste.' });
@@ -295,7 +303,7 @@ async function handleAnalyzeFood(req: VercelRequest, res: VercelResponse) {
 
 async function handleAnalyzeActivity(req: VercelRequest, res: VercelResponse) {
   const body = await parseBody(req);
-  const text = body.text || '';
+  const text = sanitizeStr(body.text, 2000);
 
   if (!text) {
     return res.status(400).json({ error: 'Por favor proporciona la descripción de tu entrenamiento.' });
@@ -326,10 +334,13 @@ async function handleAnalyzeActivity(req: VercelRequest, res: VercelResponse) {
 
 async function handleSuggestRecipes(req: VercelRequest, res: VercelResponse) {
   const body = await parseBody(req);
-  const { targetKcal, targetPeriod, preferences, ingredients } = body;
+  const targetKcal = sanitizeNum(body.targetKcal, 100, 5000);
+  const targetPeriod = sanitizeStr(body.targetPeriod, 20);
+  const preferences = sanitizeStr(body.preferences, 500);
+  const ingredients = sanitizeStr(body.ingredients, 1000);
 
   if (!targetKcal) {
-    return res.status(400).json({ error: 'Por favor proporciona las calorías objetivo.' });
+    return res.status(400).json({ error: 'Por favor proporciona las calorías objetivo (100-5000).' });
   }
 
   let result: any;
@@ -366,6 +377,38 @@ async function handleSuggestRecipes(req: VercelRequest, res: VercelResponse) {
   res.status(200).json(result);
 }
 
+// ─── Rate limiter ──────────────────────────────────────────────────────
+
+const RATE_WINDOW = 60_000;
+const MAX_PER_WINDOW = 30;
+const rateMap = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  if (entry.count >= MAX_PER_WINDOW) return false;
+  entry.count++;
+  return true;
+}
+
+// ─── Input sanitizer ───────────────────────────────────────────────────
+
+function sanitizeStr(val: unknown, maxLen = 2000): string | undefined {
+  if (typeof val !== 'string') return undefined;
+  const trimmed = val.trim().slice(0, maxLen);
+  return trimmed || undefined;
+}
+
+function sanitizeNum(val: unknown, min = 0, max = 99999): number | undefined {
+  const n = typeof val === 'string' ? parseFloat(val) : typeof val === 'number' ? val : NaN;
+  if (isNaN(n) || n < min || n > max) return undefined;
+  return n;
+}
+
 // ─── Main handler ──────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -373,6 +416,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method || 'GET';
 
   res.setHeader('Content-Type', 'application/json');
+
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 'unknown';
+  if (!rateLimit(clientIp)) {
+    return res.status(429).json({ error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' });
+  }
 
   try {
     if (url === '/api/health' || url === '/api/index' || url === '/api') {
