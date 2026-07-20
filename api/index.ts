@@ -127,7 +127,7 @@ function fallbackRecipeGenerator(targetKcal: number, _targetPeriod: string, pref
 
 const GEMINI_API_KEY = () => process.env.GEMINI_API_KEY || '';
 
-const GEMINI_MODELS = ['gemini-2.0-flash-001', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
+const GEMINI_MODELS = ['gemini-2.0-flash-001', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-3.5-flash', 'gemma-4-31b-it'];
 
 async function callGemini(prompt: string, schema?: any): Promise<string | null> {
   const key = GEMINI_API_KEY();
