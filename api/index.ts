@@ -123,22 +123,35 @@ function fallbackRecipeGenerator(targetKcal: number, _targetPeriod: string, pref
   return { recetas: sorted.map(item => ({ nombre: item.nombre, calorias: item.kcal, proteinas: item.prot, ingredientes: item.ingredientes, pasos: item.pasos, justificacion: item.justificacion + " (Sugerencia local offline)" })) };
 }
 
-// ─── Gemini client (lazy) ──────────────────────────────────────────────
+// ─── Gemini via REST API (lighter than SDK) ───────────────────────────
 
-let _genaiCache: any = null;
-async function getGenAI() {
-  if (_genaiCache) return _genaiCache;
-  try {
-    const mod = await import('@google/genai');
-    const ai = new mod.GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY || '',
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-    });
-    _genaiCache = { ai };
-  } catch {
-    _genaiCache = { ai: null };
+const GEMINI_API_KEY = () => process.env.GEMINI_API_KEY || '';
+
+async function callGemini(prompt: string, schema?: any): Promise<string | null> {
+  const key = GEMINI_API_KEY();
+  if (!key) return null;
+
+  const body: any = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.7 }
+  };
+
+  if (schema) {
+    body.generationConfig.responseMimeType = 'application/json';
+    body.generationConfig.responseSchema = schema;
   }
-  return _genaiCache;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Parse JSON body ───────────────────────────────────────────────────
@@ -164,18 +177,36 @@ async function handleSuggestPlan(req: VercelRequest, res: VercelResponse) {
 
   let data: any;
   try {
-    const genai = await getGenAI();
-    if (!genai.ai) throw new Error('no ai');
-
     const prompt = `Genera un plan semanal nutricional en ESPAÑOL para un usuario con objetivo: ${goal || 'saludable'}, ${dailyKcalTarget || 2000} kcal/día, ${proteinsTarget || 100}g proteína. Incluye 7 días con desayuno, almuerzo, cena, snacks, kcal estimada y entrenamiento. Responde JSON con "objetivo", "consejosGenerales" y "planesPorDia".`;
 
-    const response = await genai.ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: { temperature: 0.9, responseMimeType: 'application/json' }
-    });
+    const schema = {
+      type: "object",
+      required: ["objetivo", "consejosGenerales", "planesPorDia"],
+      properties: {
+        objetivo: { type: "string" },
+        consejosGenerales: { type: "string" },
+        planesPorDia: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["dia", "desayuno", "almuerzo", "cena", "snacks", "kcalEstimada", "entrenamiento"],
+            properties: {
+              dia: { type: "string" },
+              desayuno: { type: "string" },
+              almuerzo: { type: "string" },
+              cena: { type: "string" },
+              snacks: { type: "string" },
+              kcalEstimada: { type: "integer" },
+              entrenamiento: { type: "string" }
+            }
+          }
+        }
+      }
+    };
 
-    data = JSON.parse(response.text || '');
+    const text = await callGemini(prompt, schema);
+    if (!text) throw new Error('no response');
+    data = JSON.parse(text);
   } catch {
     data = fallbackPlanGenerator({
       goal, kcalObjetivo: dailyKcalTarget, proteinasObjetivo: proteinsTarget
@@ -195,18 +226,19 @@ async function handleAnalyzeFood(req: VercelRequest, res: VercelResponse) {
 
   let result: any;
   try {
-    const genai = await getGenAI();
-    if (!genai.ai) throw new Error('no ai');
-
     const prompt = `Analiza esta comida: "${text}". Devuelve JSON con "alimentos" (string), "calorias" (int), "proteinas" (int).`;
-
-    const response = await genai.ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: { temperature: 0.6, responseMimeType: 'application/json' }
-    });
-
-    result = JSON.parse(response.text || '');
+    const schema = {
+      type: "object",
+      required: ["alimentos", "calorias", "proteinas"],
+      properties: {
+        alimentos: { type: "string" },
+        calorias: { type: "integer" },
+        proteinas: { type: "integer" }
+      }
+    };
+    const responseText = await callGemini(prompt, schema);
+    if (!responseText) throw new Error('no response');
+    result = JSON.parse(responseText);
   } catch {
     result = fallbackFoodAnalyzer(text);
   }
@@ -224,18 +256,20 @@ async function handleAnalyzeActivity(req: VercelRequest, res: VercelResponse) {
 
   let result: any;
   try {
-    const genai = await getGenAI();
-    if (!genai.ai) throw new Error('no ai');
-
-    const prompt = `Analiza este ejercicio: "${text}". Devuelve JSON con "ejercicio" (string), "duracion" (int), "intensidad" ("Baja"|"Media"|"Alta"), "caloriasQuemadas" (int).`;
-
-    const response = await genai.ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: { temperature: 0.6, responseMimeType: 'application/json' }
-    });
-
-    result = JSON.parse(response.text || '');
+    const prompt = `Analiza este ejercicio: "${text}". Devuelve JSON con "ejercicio" (string), "duracion" (int), "intensidad" (string), "caloriasQuemadas" (int).`;
+    const schema = {
+      type: "object",
+      required: ["ejercicio", "duracion", "intensidad", "caloriasQuemadas"],
+      properties: {
+        ejercicio: { type: "string" },
+        duracion: { type: "integer" },
+        intensidad: { type: "string" },
+        caloriasQuemadas: { type: "integer" }
+      }
+    };
+    const responseText = await callGemini(prompt, schema);
+    if (!responseText) throw new Error('no response');
+    result = JSON.parse(responseText);
   } catch {
     result = fallbackActivityAnalyzer(text);
   }
@@ -253,18 +287,31 @@ async function handleSuggestRecipes(req: VercelRequest, res: VercelResponse) {
 
   let result: any;
   try {
-    const genai = await getGenAI();
-    if (!genai.ai) throw new Error('no ai');
-
-    const prompt = `Genera 2-3 recetas saludables en ESPAÑOL con ${targetKcal} kcal. Preferencias: ${preferences || 'ninguna'}. Ingredientes: ${ingredients || 'cualquiera'}. Devuelve JSON con "recetas" (array con "nombre", "calorias", "proteinas", "ingredientes"[], "pasos"[], "justificacion").`;
-
-    const response = await genai.ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: { temperature: 0.9, responseMimeType: 'application/json' }
-    });
-
-    result = JSON.parse(response.text || '');
+    const prompt = `Genera 2-3 recetas saludables en ESPAÑOL con ${targetKcal} kcal. Preferencias: ${preferences || 'ninguna'}. Ingredientes: ${ingredients || 'cualquiera'}. Devuelve JSON con "recetas".`;
+    const schema = {
+      type: "object",
+      required: ["recetas"],
+      properties: {
+        recetas: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["nombre", "calorias", "proteinas", "ingredientes", "pasos", "justificacion"],
+            properties: {
+              nombre: { type: "string" },
+              calorias: { type: "integer" },
+              proteinas: { type: "integer" },
+              ingredientes: { type: "array", items: { type: "string" } },
+              pasos: { type: "array", items: { type: "string" } },
+              justificacion: { type: "string" }
+            }
+          }
+        }
+      }
+    };
+    const responseText = await callGemini(prompt, schema);
+    if (!responseText) throw new Error('no response');
+    result = JSON.parse(responseText);
   } catch {
     result = fallbackRecipeGenerator(targetKcal, targetPeriod || 'meal', preferences || '', ingredients || '');
   }
