@@ -127,6 +127,8 @@ function fallbackRecipeGenerator(targetKcal: number, _targetPeriod: string, pref
 
 const GEMINI_API_KEY = () => process.env.GEMINI_API_KEY || '';
 
+const GEMINI_MODELS = ['gemini-2.0-flash-001', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
+
 async function callGemini(prompt: string, schema?: any): Promise<string | null> {
   const key = GEMINI_API_KEY();
   if (!key) return null;
@@ -141,26 +143,35 @@ async function callGemini(prompt: string, schema?: any): Promise<string | null> 
     body.generationConfig.responseSchema = schema;
   }
 
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify(body)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  for (const model of GEMINI_MODELS) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify(body),
+          signal: controller.signal
+        }
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`Gemini ${model} error:`, res.status);
+        continue;
       }
-    );
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('Gemini API error:', res.status, errText);
-      return null;
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+      if (text) return text;
+    } catch {
+      continue;
     }
-    const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-  } catch (e: any) {
-    console.error('Gemini fetch error:', e?.message || e);
-    return null;
   }
+
+  clearTimeout(timeout);
+  return null;
 }
 
 // ─── Parse JSON body ───────────────────────────────────────────────────
