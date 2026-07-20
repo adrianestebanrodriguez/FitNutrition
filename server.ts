@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3002;
 
 app.use(express.json());
 
@@ -407,7 +407,9 @@ app.post("/api/agent/suggest-plan", async (req: Request, res: Response) => {
     trigliceridos,
     colesterolHDL,
     colesterolLDL,
-    pcrUs
+    pcrUs,
+    horasSueno,
+    tshTiroides
   } = req.body;
 
   let medicalRestrictionsText = "";
@@ -421,32 +423,114 @@ app.post("/api/agent/suggest-plan", async (req: Request, res: Response) => {
   if (colesterolHDL) clinicalMarkersText += `\n- Colesterol HDL: ${colesterolHDL} mg/dL`;
   if (colesterolLDL) clinicalMarkersText += `\n- Colesterol LDL: ${colesterolLDL} mg/dL`;
   if (pcrUs) clinicalMarkersText += `\n- Proteína C Reactiva (PCR-us): ${pcrUs} mg/L`;
+  if (horasSueno) clinicalMarkersText += `\n- Horas de Sueño Promedio: ${horasSueno} h`;
+  if (tshTiroides) clinicalMarkersText += `\n- Hormona TSH (Tiroides): ${tshTiroides} µIU/mL`;
 
-  const prompt = `Actúa como un experto nutricionista clínico y entrenador personal certificado médico-deportivo.
-Genera un plan semanal completo y personalizado de nutrición (desayuno, almuerzo, cena y snacks) y entrenamiento físico en base al siguiente perfil del usuario:
-- Edad: ${age} años
+  let goalTypeText = "";
+  if (goal?.toLowerCase().includes("perder") || goal?.toLowerCase().includes("deficit") || goal?.toLowerCase().includes("déficit") || goal?.toLowerCase().includes("bajar") || goal?.toLowerCase().includes("perdida") || goal?.toLowerCase().includes("pérdida")) {
+    goalTypeText = "DÉFICIT CALÓRICO: Prioriza proteínas magras, vegetales de alto volumen y bajo contenido calórico, carbohidratos complejos en cantidades controladas. El objetivo es pérdida de grasa preservando masa muscular. Incluye alimentos saciantes y ricos en fibra.";
+  } else if (goal?.toLowerCase().includes("ganar") || goal?.toLowerCase().includes("superavit") || goal?.toLowerCase().includes("superávit") || goal?.toLowerCase().includes("volumen") || goal?.toLowerCase().includes("masa") || goal?.toLowerCase().includes("hipertrofia")) {
+    goalTypeText = "SUPERÁVIT CALÓRICO: Prioriza proteínas de alto valor biológico, carbohidratos para rendimiento y energía, grasas saludables para función hormonal. El objetivo es ganancia de masa muscular. Las porciones deben ser generosas y frecuentes.";
+  } else {
+    goalTypeText = "MANTENIMIENTO/NORMOCALÓRICO: Balance energético equilibrado. Distribución de macros para mantener peso y composición corporal. Las comidas deben ser completas y nutritivas sin excesos ni restricciones severas.";
+  }
+
+  let glucoseGuidelines = "";
+  if (glucosaSangre) {
+    const gluc = Number(glucosaSangre);
+    if (gluc >= 126) {
+      glucoseGuidelines = "GLUCOSA ALTA (≥126 mg/dL): Prioridad ABSOLUTA en control glucémico. Todas las comidas deben tener bajo índice glucémico. Prohíbe azúcares añadidos, harinas refinadas, jugos de fruta, arroz blanco, papas. Usa sólo carbohidratos complejos (quinoa, avena integral, legumbres, vegetales no feculentos) en porciones medidas. Cada comida debe combinar proteína + fibra + grasa saludable para estabilizar glucosa.";
+    } else if (gluc >= 100) {
+      glucoseGuidelines = "GLUCOSA ELEVADA / PREDIABETES (100-125 mg/dL): Prioriza alimentos de bajo índice glucémico. Reduce carbohidratos simples y refinados. Cada comida debe tener al menos 20-30g de proteína y fibra soluble para evitar picos de insulina. Incluye canela, vinagre de manzana y grasas saludables que ayudan a modular la respuesta glucémica.";
+    } else {
+      glucoseGuidelines = "GLUCOSA NORMAL (<100 mg/dL): Mantén el equilibrio actual. Incluye carbohidratos complejos en todas las comidas y distribuye la proteína uniformemente. Evita picos de glucosa con comidas altas en azúcar.";
+    }
+  }
+
+  let inflammationGuidelines = "";
+  if (pcrUs) {
+    const pcr = Number(pcrUs);
+    if (pcr > 3.0) {
+      inflammationGuidelines = "INFLAMACIÓN CRÓNICA ALTA (PCR-us >3.0 mg/L): DIETA ANTIINFLAMATORIA ESTRICTA. Incluye ácidos grasos omega-3 (salmón, caballa, sardinas, nueces, semillas de chía y lino). Añade cúrcuma con pimienta negra diariamente. Prioriza vegetales de hoja verde, frutas rojas, aceite de oliva virgen extra. Elimina alimentos ultraprocesados, fritos, grasas trans, alcohol y azúcares refinados. Incluye probióticos (yogur griego, kéfir, vegetales fermentados).";
+    } else if (pcr >= 1.0) {
+      inflammationGuidelines = "INFLAMACIÓN DE BAJO GRADO (PCR-us 1.0-3.0 mg/L): Incorpora alimentos antiinflamatorios como pescado graso 3-4 veces por semana, cúrcuma, jengibre, aceite de oliva, frutos secos y semillas. Reduce consumo de carnes rojas, lácteos enteros y alcohol. Aumenta ingesta de antioxidantes naturales (frutas del bosque, vegetales coloridos, té verde).";
+    } else {
+      inflammationGuidelines = "INFLAMACIÓN BAJA (PCR-us <1.0 mg/L): Continúa con una dieta rica en antioxidantes y omega-3 para mantener el estado antiinflamatorio favorable.";
+    }
+  }
+
+  let lipidGuidelines = "";
+  if (colesterolLDL || trigliceridos || colesterolHDL) {
+    const ldl = Number(colesterolLDL) || 0;
+    const tg = Number(trigliceridos) || 0;
+    const hdl = Number(colesterolHDL) || 60;
+    const lipidNotes: string[] = [];
+    if (ldl >= 160) lipidNotes.push("LDL elevado: Reduce grasas saturadas (carnes rojas, embutidos, mantequilla, queso entero, piel de pollo). Aumenta fibra soluble (avena, legumbres, manzana, berenjena) y fitoesteroles (nueces, semillas, aceites vegetales).");
+    if (ldl >= 130 && ldl < 160) lipidNotes.push("LDL moderado: Modera el consumo de grasas saturadas y aumenta pescado azul y fibra soluble.");
+    if (tg >= 200) lipidNotes.push("TRIGLICÉRIDOS ALTOS: Reduce drásticamente carbohidratos simples, azúcares y alcohol. Aumenta omega-3 (pescado graso, nueces, semillas de lino). Prioriza carbohidratos complejos con fibra.");
+    if (tg >= 150 && tg < 200) lipidNotes.push("Triglicéridos moderados: Reduce azúcares añadidos y carbohidratos refinados. Incrementa actividad cardiovascular.");
+    if (hdl < 40) lipidNotes.push("HDL bajo: Aumenta grasas monoinsaturadas (aceite de oliva, aguacate, frutos secos, aceitunas) y realiza ejercicio cardiovascular regular.");
+    if (lipidNotes.length > 0) lipidGuidelines = "PERFIL LIPÍDICO: " + lipidNotes.join(" ");
+  }
+
+  let thyroidGuidelines = "";
+  if (tshTiroides) {
+    const tsh = Number(tshTiroides);
+    if (tsh > 4.5) {
+      thyroidGuidelines = "TSH ELEVADA / HIPOTIROIDISMO: Asegura ingesta adecuada de selenio (nueces de Brasil, atún, sardinas, huevo) y zinc (ostras, carne magra, semillas de calabaza). Incluye alimentos ricos en yodo (pescado de mar, algas, sal yodada con moderación). Evita consumo excesivo de crucíferas crudas (brócoli, coliflor, repollo) que pueden interferir con la función tiroidea; consúmelas cocidas. Mantén hidratación y control calórico estricto ya que el metabolismo puede estar más lento.";
+    } else if (tsh < 0.5) {
+      thyroidGuidelines = "TSH BAJA / HIPERTIROIDISMO: Aumenta el aporte calórico para compensar el metabolismo acelerado. Prioriza proteínas magras, carbohidratos complejos y grasas saludables para evitar pérdida de peso no intencionada. Incluye calcio y vitamina D para proteger densidad ósea. Reduce cafeína y estimulantes.";
+    }
+  }
+
+  let sleepGuidelines = "";
+  if (horasSueno) {
+    if (Number(horasSueno) < 6.5) {
+      sleepGuidelines = "SUEÑO INSUFICIENTE (<6.5h): Prioriza alimentos ricos en triptófano (pavo, huevo, lácteos, plátano, avena) y magnesio (espinacas, almendras, semillas de calabaza) para mejorar calidad del sueño. Evita cafeína después de las 4pm. Reduce carbohidratos simples en la cena.";
+    }
+  }
+
+  const inputSummary = `- Edad: ${age} años
 - Altura: ${height} cm
 - Peso Actual: ${currentWeight} kg
 - Peso Objetivo: ${targetWeight} kg
 - Objetivo principal: ${goal}
+- Tipo de plan: ${goalTypeText.split(":")[0]}
 - Objetivo de Calorías Diarias: ${dailyKcalTarget} kcal
-- Objetivo de Proteínas Diarias: ${proteinsTarget} g${medicalRestrictionsText ? `\n\nCONDICIONES CLÍNICAS Y LIMITACIONES FÍSICAS RELEVANTES:${medicalRestrictionsText}` : ""}${clinicalMarkersText ? `\n\nBIOMARCADORES DE LABORATORIO APORTADOS:${clinicalMarkersText}` : ""}
+- Objetivo de Proteínas Diarias: ${proteinsTarget} g`;
+
+  const prompt = `Actúa como un experto nutricionista clínico con especialización en endocrinología metabólica, inflamación sistémica y medicina del deporte.
+
+Genera un plan semanal completo y personalizado de nutrición (desayuno, almuerzo, cena y snacks) y entrenamiento físico basado en el siguiente perfil del usuario:
+
+${inputSummary}${medicalRestrictionsText ? `\n\nCONDICIONES CLÍNICAS Y LIMITACIONES FÍSICAS RELEVANTES:${medicalRestrictionsText}` : ""}${clinicalMarkersText ? `\n\nBIOMARCADORES DE LABORATORIO APORTADOS:${clinicalMarkersText}` : ""}
+
+ESTRATEGIA NUTRICIONAL SEGÚN OBJETIVO:
+${goalTypeText}
+
+${glucoseGuidelines ? `ADAPTACIÓN POR GLUCOSA:\n${glucoseGuidelines}\n` : ""}${inflammationGuidelines ? `ADAPTACIÓN POR INFLAMACIÓN:\n${inflammationGuidelines}\n` : ""}${lipidGuidelines ? `ADAPTACIÓN POR PERFIL LIPÍDICO:\n${lipidGuidelines}\n` : ""}${thyroidGuidelines ? `ADAPTACIÓN POR TIROIDES:\n${thyroidGuidelines}\n` : ""}${sleepGuidelines ? `ADAPTACIÓN POR SUEÑO:\n${sleepGuidelines}\n` : ""}
 
 INDICACIONES MÉDICO-DEPORTIVAS CRÍTICAS DE SEGURIDAD:
-- Si el usuario reporta alguna enfermedad o condición previa (ej: diabetes, hipertensión, hipotiroidismo), adapta rigurosamente la recomendación de ingesta calórica y la distribución de nutrientes.
-- Si el usuario reporta lesiones activas o problemas musculares o articulares, DEBES AJUSTAR las rutinas de ejercicio diarias de forma que eviten empeorar el daño. Por ejemplo: si reporta dolores de rodilla o espalda alta, no propongas sentadillas de alto impacto ni cargas compresivas; en su lugar, selecciona disciplinas de bajo impacto (natación, bicicleta elíptica, ejercicios isométricos, movilidad).
-- Explica de manera concisa y clara en el apartado de "consejosGenerales" cómo has adaptado el plan de alimentos u opciones físicas para respetar sus restricciones clínicas.
+- Si el usuario reporta diabetes, prediabetes o glucosa elevada: TODAS las comidas deben priorizar control glucémico (bajo IG, sin azúcares, combinación proteína+grasa+fibra en cada comida).
+- Si el usuario reporta inflamación alta (PCR-us elevada o enfermedades autoinmunes): LA DIETA DEBE SER ANTIINFLAMATORIA (omega-3, cúrcuma, antioxidantes, eliminar procesados y fritos).
+- Si el usuario reporta enfermedades o condiciones previas (diabetes, hipertensión, hipotiroidismo, resistencia a la insulina): adapta rigurosamente la selección de alimentos.
+- Si el usuario reporta lesiones activas o problemas musculares/articulares: ajusta las rutinas de ejercicio para evitar daño (bajo impacto, natación, elíptica, isométricos, movilidad articular).
+- Explica en "consejosGenerales" cómo adaptaste el plan según sus biomarcadores y condiciones clínicas.
 
-Debes proporcionar de forma estricta un plan de 7 días (Lunes, Martes, Miércoles, Jueves, Viernes, Sábado, Domingo).
+Debes proporcionar un plan de 7 días (Lunes, Martes, Miércoles, Jueves, Viernes, Sábado, Domingo).
 Para cada día, define:
 1. Desayuno (saludable, equilibrado y fácil de preparar)
-2. Almuerzo (la comida principal, detallando ingredientes clave sanos)
-3. Cena (comida ligera y alta en proteínas)
+2. Almuerzo (la comida principal, detallando ingredientes clave)
+3. Cena (comida ligera, alta en proteínas y adaptada a las condiciones del usuario)
 4. Snacks (ideas saludables para picar entre horas)
-5. Kcal Estimada (estimación de calorías para todo el día de alimentación asignado en el plan)
-6. Entrenamiento (ejercicios recomendados para ese día, descanso o cardio de bajo impacto según aplique)
+5. Kcal Estimada (calorías totales estimadas del día)
+6. Entrenamiento (ejercicio adaptado a condición física, lesiones y objetivo)
 
-Escribe todos los textos en ESPAÑOL, de manera motivadora, elegante y profesional.`;
+CRÍTICO SOBRE VARIEDAD: Cada día debe tener comidas COMPLETAMENTE DIFERENTES. No repitas ningún plato entre los 7 días. Varía proteínas (pollo, pescado azul, pescado blanco, huevo, ternera magra, tofu, pavo, legumbres), carbohidratos (quinoa, arroz integral, batata, avena, pasta integral, legumbres, pan integral) y vegetales (brócoli, espinacas, calabacín, pimiento, berenjena, zanahoria, espárragos). Usa diferentes técnicas de cocción (plancha, horno, salteado, vapor, papillote, crudo, hervido). La variedad es OBLIGATORIA.
+
+CRÍTICO SOBRE ADAPTACIÓN CLÍNICA: Cada comida debe estar alineada con las condiciones de salud del usuario. Por ejemplo: si tiene glucosa alta no sugerir arroz blanco ni jugos; si tiene inflamación alta incluir omega-3 y cúrcuma; si tiene colesterol LDL alto evitar grasas saturadas y priorizar fibra soluble.
+
+Escribe todo en ESPAÑOL, de manera motivadora, elegante y profesional.`;
 
   const responseSchema = {
     type: Type.OBJECT,
@@ -488,6 +572,7 @@ Escribe todos los textos en ESPAÑOL, de manera motivadora, elegante y profesion
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
+          temperature: 0.9,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -500,6 +585,7 @@ Escribe todos los textos en ESPAÑOL, de manera motivadora, elegante y profesion
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
+          temperature: 0.9,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -556,6 +642,7 @@ Responde estrictamente en formato JSON según el esquema especificado.`;
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
+          temperature: 0.6,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -567,6 +654,7 @@ Responde estrictamente en formato JSON según el esquema especificado.`;
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
+          temperature: 0.6,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -621,6 +709,7 @@ Responde estrictamente en formato JSON según el esquema especificado.`;
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
+          temperature: 0.6,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -632,6 +721,7 @@ Responde estrictamente en formato JSON según el esquema especificado.`;
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
+          temperature: 0.6,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -666,7 +756,7 @@ Genera 2 o 3 sugerencias de recetas saludables, deliciosas y perfectamente equil
 - Preferencias o restricciones alimentarias: ${preferences || 'Ninguna especificada'}
 - Ingredientes disponibles (opcional, si se proporcionan úsalos o facilítalos): ${ingredients || 'Cualquiera'}
 
-Cada sugerencia de receta debe ser detallada, creativa, realista para preparar en casa y nutricionalmente coherente con el objetivo de calorías establecido en el prompt.
+Cada sugerencia de receta debe ser detallada, creativa, variada (no repitas recetas típicas como pechuga de pollo o salmón a la plancha), realista para preparar en casa y nutricionalmente coherente con el objetivo de calorías establecido en el prompt.
 
 Responde estrictamente en formato JSON en ESPAÑOL, siguiendo el esquema de respuesta definido.`;
 
@@ -708,6 +798,7 @@ Responde estrictamente en formato JSON en ESPAÑOL, siguiendo el esquema de resp
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
+          temperature: 0.9,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -719,6 +810,7 @@ Responde estrictamente en formato JSON en ESPAÑOL, siguiendo el esquema de resp
         model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
+          temperature: 0.9,
           responseMimeType: "application/json",
           responseSchema
         }
@@ -744,6 +836,8 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "healthy", time: new Date() });
 });
 
+export default app;
+
 // Integración con Vite en modo desarrollo u estático en producción
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
@@ -755,15 +849,21 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    // SPA fallback
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    // SPA fallback (only for non-Vercel production)
+    if (!process.env.VERCEL) {
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] Corriendo de manera segura en http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[Server] Corriendo de manera segura en http://localhost:${PORT}`);
+    });
+  }
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
