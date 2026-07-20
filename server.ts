@@ -1,9 +1,17 @@
 import path from "path";
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import app from "./api/app.js";
+import handler from "./api/index.js";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3002;
+const app = express();
+
+app.use(express.json());
+
+app.all("/api/*", async (req, res) => {
+  (req as any).body = req.body || {};
+  await handler(req as any, res as any);
+});
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
