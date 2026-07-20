@@ -43,7 +43,9 @@ export default function WeeklyPlanner({ currentPlan, profile, token, onPlanUpdat
           trigliceridos: profile.trigliceridos,
           colesterolHDL: profile.colesterolHDL,
           colesterolLDL: profile.colesterolLDL,
-          pcrUs: profile.pcrUs
+          pcrUs: profile.pcrUs,
+          horasSueno: profile.horasSueno,
+          tshTiroides: profile.tshTiroides
         })
       });
 

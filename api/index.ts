@@ -2,10 +2,31 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // ─── Fallback generators ───────────────────────────────────────────────
 
+function hasAllergy(profile: any, keyword: string): boolean {
+  const fields = [profile.enfermedades, profile.lesiones, profile.alergias, profile.restricciones];
+  return fields.some(f => f && f.toLowerCase().includes(keyword));
+}
+
+function filterForAllergies(texts: string[], profile: any): string[] {
+  const allergicToFish = hasAllergy(profile, 'pescado') || hasAllergy(profile, 'marisc') || hasAllergy(profile, 'atún') || hasAllergy(profile, 'salmon') || hasAllergy(profile, 'salmón');
+  const allergicToNuts = hasAllergy(profile, 'nuez') || hasAllergy(profile, 'maní') || hasAllergy(profile, 'almendr');
+  const allergicToLactose = hasAllergy(profile, 'lactosa') || hasAllergy(profile, 'leche') || hasAllergy(profile, 'lácteo');
+  const allergicToEgg = hasAllergy(profile, 'huevo');
+
+  return texts.filter(t => {
+    const tl = t.toLowerCase();
+    if (allergicToFish && (tl.includes('pescado') || tl.includes('atún') || tl.includes('salmon') || tl.includes('salmón') || tl.includes('merluza') || tl.includes('marisc') || tl.includes('caballa') || tl.includes('sardina'))) return false;
+    if (allergicToNuts && (tl.includes('nuez') || tl.includes('maní') || tl.includes('almendra') || tl.includes('cacahuete'))) return false;
+    if (allergicToLactose && (tl.includes('leche') || tl.includes('queso') || tl.includes('yogur') || tl.includes('lácteo') || tl.includes('crema'))) return false;
+    if (allergicToEgg && tl.includes('huevo')) return false;
+    return true;
+  });
+}
+
 function fallbackPlanGenerator(profile: any) {
   const dailyKcalTarget = profile.dailyKcalTarget || profile.kcalObjetivo || 2000;
 
-  const desayunos = [
+  let desayunos = [
     "Huevos revueltos (3 claras, 1 huevo entero) con 1 tostada de pan integral, aguacate y taza de café sin azúcar.",
     "Bowl de yogur griego natural (200g) con fresas, arándanos, granola sin azúcar y semillas de chía.",
     "Tortitas fit de avena y claras de huevo (3 unidades) con sirope sin calorías y frutos rojos frescos.",
@@ -14,7 +35,7 @@ function fallbackPlanGenerator(profile: any) {
     "Pan integral tostado (2 rebanadas) con aguacate machacado, huevo pochado y salmón ahumado.",
     "Avena cocida en leche desnatada con canela, manzana picada, nueces y un toque de miel."
   ];
-  const almuerzos = [
+  let almuerzos = [
     "Pechuga de pollo a la plancha (150g) con ensalada fresca mixta condimentada y porción de arroz cocido.",
     "Bowl de quinoa con garbanzos, pepino, tomate cherry, aceitunas, cebolla morada y aderezo de limón.",
     "Pescado blanco al horno (merluza 180g) con patatas asadas y verduras salteadas (pimiento, calabacín, berenjena).",
@@ -23,7 +44,7 @@ function fallbackPlanGenerator(profile: any) {
     "Ensalada completa de atún, huevo duro, maíz, lechuga, tomate, aceitunas y vinagreta ligera.",
     "Wrap integral de pavo, lechuga, tomate, queso fresco y hummus como aderezo."
   ];
-  const cenas = [
+  let cenas = [
     "Filete de salmón asado a la plancha acompañado de brócoli al vapor y un toque de aceite de oliva.",
     "Tortilla de claras con espinacas y queso cottage, acompañada de ensalada verde.",
     "Pechuga de pollo desmenuzada sobre cama de rúcula, tomates cherry, nueces y vinagreta balsámica.",
@@ -50,17 +71,22 @@ function fallbackPlanGenerator(profile: any) {
     "Natación o sesión de elíptica: 40 minutos a intensidad media-alta más estiramientos finales.",
     "Día de descanso activo: caminata de 45 minutos a ritmo ligero seguido de 20 minutos de estiramientos y yoga."
   ];
+  desayunos = filterForAllergies(desayunos, profile);
+  almuerzos = filterForAllergies(almuerzos, profile);
+  cenas = filterForAllergies(cenas, profile);
+  const snacksFiltered = filterForAllergies(snacksList, profile);
+
   const dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
   return {
-    objetivo: "Sugerencia personalizada de plan nutricional generada localmente debido a límites de API excedidos temporalmente.",
-    consejosGenerales: "Recuerda beber al menos 2.5 litros de agua al día, mantener una higiene del sueño de 7 a 8 horas continuas y entrenar con consistencia manteniendo la sobrecarga progresiva en tus ejercicios físicos diarios.",
+    objetivo: "Sugerencia personalizada de plan nutricional generada localmente.",
+    consejosGenerales: "Recuerda beber al menos 2.5 litros de agua al día, mantener una higiene del sueño de 7 a 8 horas continuas y entrenar con consistencia.",
     planesPorDia: dias.map((dia, index) => ({
       dia,
-      desayuno: desayunos[index % desayunos.length],
-      almuerzo: almuerzos[index % almuerzos.length],
-      cena: cenas[index % cenas.length],
-      snacks: snacksList[index % snacksList.length],
+      desayuno: desayunos[index % desayunos.length] || desayunos[0],
+      almuerzo: almuerzos[index % almuerzos.length] || almuerzos[0],
+      cena: cenas[index % cenas.length] || cenas[0],
+      snacks: snacksFiltered[index % snacksFiltered.length] || snacksFiltered[0],
       kcalEstimada: Math.round(dailyKcalTarget * (0.95 + (index % 7) * 0.01)),
       entrenamiento: entrenamientos[index % entrenamientos.length]
     }))
@@ -193,11 +219,14 @@ async function parseBody(req: any): Promise<any> {
 
 async function handleSuggestPlan(req: VercelRequest, res: VercelResponse) {
   const body = await parseBody(req);
-  const { goal, dailyKcalTarget, proteinsTarget } = body;
+  const { goal, dailyKcalTarget, proteinsTarget, enfermedades, lesiones, problemasMusculares, alergias, restricciones } = body;
+
+  const profile = { goal, dailyKcalTarget, proteinsTarget, enfermedades, lesiones, problemasMusculares, alergias, restricciones };
+  const restriccionesText = [enfermedades, lesiones, problemasMusculares, alergias, restricciones].filter(Boolean).join(', ');
 
   let data: any;
   try {
-    const prompt = `Genera un plan semanal nutricional en ESPAÑOL para un usuario con objetivo: ${goal || 'saludable'}, ${dailyKcalTarget || 2000} kcal/día, ${proteinsTarget || 100}g proteína. Incluye 7 días con desayuno, almuerzo, cena, snacks, kcal estimada y entrenamiento. Responde JSON con "objetivo", "consejosGenerales" y "planesPorDia".`;
+    const prompt = `Genera un plan semanal nutricional en ESPAÑOL para un usuario con objetivo: ${goal || 'saludable'}, ${dailyKcalTarget || 2000} kcal/día, ${proteinsTarget || 100}g proteína.${restriccionesText ? ` RESTRICCIONES DEL USUARIO (OBLIGATORIO respetarlas): ${restriccionesText}.` : ''} Incluye 7 días con desayuno, almuerzo, cena, snacks, kcal estimada y entrenamiento. Responde JSON con "objetivo", "consejosGenerales" y "planesPorDia".`;
 
     const schema = {
       type: "object",
@@ -228,9 +257,7 @@ async function handleSuggestPlan(req: VercelRequest, res: VercelResponse) {
     if (!text) throw new Error('no response');
     data = JSON.parse(text);
   } catch {
-    data = fallbackPlanGenerator({
-      goal, kcalObjetivo: dailyKcalTarget, proteinasObjetivo: proteinsTarget
-    });
+    data = fallbackPlanGenerator(profile);
   }
 
   res.status(200).json(data);
